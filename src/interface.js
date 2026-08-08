@@ -512,18 +512,21 @@ Interface.prototype.__handleStackResize = function() {
 
 Interface.prototype.handleResize = function(event) {
 
-  /*
-   * Function Interface.handleResize
-   * Closes windows in the column if the window is resized
-   */
+  // Se o renderizador ou a tela não existirem (modo offline), simplesmente ignora
+  if (!gameClient.renderer || !gameClient.renderer.screen) {
+    return;
+  }
 
   // Get and set the resolution scale
   gameClient.renderer.screen.setScale(this.getResolutionScale());
 
   // We should update the wrapper size explicitly too
-  let { width, height } = gameClient.renderer.screen.canvas.getBoundingClientRect();
+  let canvas = gameClient.renderer.screen.canvas;
+  if (canvas) {
+    let rect = canvas.getBoundingClientRect();
+    this.setElementDimensions(document.getElementById("canvas-id"), rect.width, rect.height);
+  }
 
-  this.setElementDimensions(document.getElementById("canvas-id"), width, height);
   this.__handleStackResize();
 
 }
