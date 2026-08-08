@@ -211,16 +211,8 @@ Interface.prototype.enterGame = function() {
    * Callback fired when the enter game button is clicked
    */
 
-  // Block if the assets are not yet loaded
-  if(!this.areAssetsLoaded()) {
-    return alert("The Tibia.spr and Tibia.dat must be loaded first.");
-  }
-
-  // Show the connecting message
-  this.modalManager.open("floater-connecting", "Connecting to Gameworld...");
-
-  // Connect with the connection details
-  gameClient.connect();
+  // Inicia o jogo em modo offline
+  Offline.start();
 
 }
 
