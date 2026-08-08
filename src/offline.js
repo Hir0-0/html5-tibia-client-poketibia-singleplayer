@@ -40,10 +40,11 @@ const Offline = {
 
   // Inicializa o jogo em modo offline
   start: function() {
-    // Carrega os assets automaticamente (se houver na pasta data/)
+    console.log("Offline.start() executado");
+
+    // Carrega os assets automaticamente (se não estiverem prontos)
     if (!gameClient.interface.areAssetsLoaded()) {
       gameClient.networkManager.loadGameFilesServer();
-      // Pequeno atraso para carregar assets antes de iniciar
       setTimeout(() => Offline.start(), 500);
       return;
     }
@@ -81,11 +82,53 @@ const Offline = {
       mounts: playerData.mounts
     });
 
+    // GERA O CHÃO AO REDOR DO JOGADOR
+    Offline.generateGround(100, 100, 7, 30);
+
+    // Força a atualização da cache de tiles
+    gameClient.renderer.updateTileCache();
+
     // Mostra os botões de save/load
     document.getElementById("save-button").style.display = "inline-block";
     document.getElementById("load-button").style.display = "inline-block";
 
     console.log("Pokétibia offline iniciado! Bom jogo.");
+  },
+
+  // Gera grama (ID 2) num quadrado ao redor de (cx, cy, z)
+  generateGround: function(cx, cy, z, radius) {
+    const world = gameClient.world;
+    if (!world) return;
+
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        let wx = cx + dx;
+        let wy = cy + dy;
+
+        // Obtém o chunk correspondente
+        let chunk = world.getChunkFromWorldPosition({x: wx, y: wy, z: z});
+        if (!chunk) continue;
+
+        // Cria um tile com ID de grama (2) e flags 0
+        let tile = new Tile({id: 2, flags: 0}, {x: wx, y: wy, z: z});
+
+        // Adiciona o tile ao chunk. Verifique se chunk.setTile existe.
+        // Se não existir, tente chunk.tiles[localX][localY][localZ] = tile.
+        let localX = wx - chunk.getStartX();
+        let localY = wy - chunk.getStartY();
+        let localZ = z - chunk.getStartZ();
+
+        if (typeof chunk.setTile === 'function') {
+          chunk.setTile(localX, localY, localZ, tile);
+        } else {
+          // Fallback: acesso direto à matriz
+          if (!chunk.tiles) chunk.tiles = [];
+          if (!chunk.tiles[localX]) chunk.tiles[localX] = [];
+          if (!chunk.tiles[localX][localY]) chunk.tiles[localX][localY] = [];
+          chunk.tiles[localX][localY][localZ] = tile;
+        }
+      }
+    }
   },
 
   // Salva o estado atual em um arquivo JSON
@@ -104,7 +147,7 @@ const Offline = {
         capacity: gameClient.player.state.capacity,
         speed: gameClient.player.state.speed,
         position: gameClient.player.getPosition(),
-        equipment: gameClient.player.equipment.save ? gameClient.player.equipment.save() : gameClient.player.equipment,
+        equipment: gameClient.player.equipment,
         outfits: gameClient.player.outfits,
         mounts: gameClient.player.mounts
       },
@@ -163,6 +206,11 @@ const Offline = {
         mounts: state.player.mounts
       });
 
+      // Gera o chão ao redor da nova posição
+      let pos = state.player.position;
+      Offline.generateGround(pos.x, pos.y, pos.z, 30);
+      gameClient.renderer.updateTileCache();
+
       document.getElementById("save-button").style.display = "inline-block";
       document.getElementById("load-button").style.display = "inline-block";
       console.log("Jogo carregado do save.");
@@ -173,11 +221,11 @@ const Offline = {
 
 // Adiciona os listeners assim que o DOM estiver pronto
 document.addEventListener("DOMContentLoaded", function() {
-  document.getElementById("save-button").addEventListener("click", Offline.save);
-  document.getElementById("load-button").addEventListener("click", function() {
+  document.getElementById("save-button")?.addEventListener("click", Offline.save);
+  document.getElementById("load-button")?.addEventListener("click", function() {
     document.getElementById("load-file-input").click();
   });
-  document.getElementById("load-file-input").addEventListener("change", function(e) {
+  document.getElementById("load-file-input")?.addEventListener("change", function(e) {
     if (e.target.files[0]) {
       Offline.load(e.target.files[0]);
     }
