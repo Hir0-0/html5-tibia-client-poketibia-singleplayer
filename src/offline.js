@@ -24,7 +24,14 @@ const Offline = {
         right: null, left: null, legs: null, feet: null, ring: null
       },
       outfits: [
-  { id: 128, looktype: 128, lookhead: 78, lookbody: 106, looklegs: 95, lookfeet: 76, addons: 0 }
+  {
+    id: 128,
+    details: { head: 78, body: 106, legs: 95, feet: 76 },
+    mount: 0,
+    mounted: false,
+    addonOne: false,
+    addonTwo: false
+  }
 ],
       mounts: []
     },
