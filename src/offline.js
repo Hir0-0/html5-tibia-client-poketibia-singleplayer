@@ -1,18 +1,46 @@
 // ==========================================
-// offline.js – Single player com chunks 32x32x16
+// offline.js – Correção definitiva (ID 100 e stubs nos protótipos)
 // ==========================================
+
+// Aplicar stubs ANTES de tudo (nos protótipos, se existirem)
+(function() {
+  // Minimap
+  if (typeof Minimap !== 'undefined') {
+    Minimap.prototype.cache = function() {};
+    Minimap.prototype.update = function() {};
+    Minimap.prototype.chunkUpdate = function() {};
+    Minimap.prototype.setRenderLayer = function() {};
+    Minimap.prototype.setCenter = function() {};
+    Minimap.prototype.save = function() {};
+  }
+  // Database
+  if (typeof Database !== 'undefined') {
+    Database.prototype.loadChunk = function() {};
+    Database.prototype.preloadCallback = function() {};
+    Database.prototype.clear = function() {};
+    Database.prototype.init = function() {};
+  }
+  // Thing (para evitar getMinimapColor quebrando)
+  if (typeof Thing !== 'undefined') {
+    const origGetMinimapColor = Thing.prototype.getMinimapColor;
+    Thing.prototype.getMinimapColor = function() {
+      try {
+        return origGetMinimapColor.call(this);
+      } catch(e) {
+        return 0; // cor preta como fallback
+      }
+    };
+  }
+})();
 
 const Offline = {
 
+  GRASS_ID: 100, // ID confirmado com frameGroups
+
   worldConfig: {
-    width: 2048,
-    height: 2048,
-    depth: 16,             // 16 andares
-    chunk: { width: 32, height: 32, depth: 16 },  // chunk cobre toda a profundidade
-    version: 740,
-    clientVersion: 740,
-    clock: 1,
-    tick: 50
+    width: 2048, height: 2048, depth: 16,
+    chunk: { width: 32, height: 32, depth: 16 },
+    version: 740, clientVersion: 740, clock: 1, tick: 50
   },
 
   startPosition: { x: 100, y: 100, z: 7 },
@@ -49,19 +77,18 @@ const Offline = {
       version: this.worldConfig.version,
       clock: this.worldConfig.clock,
       tick: this.worldConfig.tick,
-      chunk: this.worldConfig.chunk,   // { width:32, height:32, depth:16 }
+      chunk: this.worldConfig.chunk,
       width: this.worldConfig.width,
       height: this.worldConfig.height,
       depth: this.worldConfig.depth
     });
 
-    const pos = this.startPosition;
-    this.generateChunksAround(pos.x, pos.y, pos.z, 1);  // raio 1 (3x3 chunks)
+    console.log("Usando ID de grama:", this.GRASS_ID);
 
-    // CRUCIAL: preenche os vizinhos dos tiles (necessário para o renderizador)
+    this.generateChunksAround(this.startPosition.x, this.startPosition.y, this.startPosition.z, 1, this.GRASS_ID);
     gameClient.world.referenceTileNeighbours();
 
-    const startPos = new Position(pos.x, pos.y, pos.z);
+    const pos = new Position(this.startPosition.x, this.startPosition.y, this.startPosition.z);
     const pdata = this.playerData;
     gameClient.handleAcceptLogin({
       id: pdata.id, name: pdata.name, sex: pdata.sex,
@@ -69,7 +96,7 @@ const Offline = {
       health: pdata.health, maxHealth: pdata.maxHealth,
       mana: pdata.mana, maxMana: pdata.maxMana,
       capacity: pdata.capacity, speed: pdata.speed,
-      position: startPos,
+      position: pos,
       equipment: pdata.equipment,
       outfit: pdata.outfits[0],
       outfits: pdata.outfits,
@@ -81,15 +108,15 @@ const Offline = {
     console.log("Sobrevivente está offline. O apocalipse começou.");
   },
 
-  generateChunksAround: function(wx, wy, wz, radius) {
+  generateChunksAround: function(wx, wy, wz, radius, grassId) {
     const world = gameClient.world;
     const CHUNK_W = this.worldConfig.chunk.width;
     const CHUNK_H = this.worldConfig.chunk.height;
-    const CHUNK_D = this.worldConfig.chunk.depth;   // 16
+    const CHUNK_D = this.worldConfig.chunk.depth;
 
     const cxCenter = Math.floor(wx / CHUNK_W);
     const cyCenter = Math.floor(wy / CHUNK_H);
-    const cz = 0;   // único setor vertical
+    const cz = 0;
 
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dy = -radius; dy <= radius; dy++) {
@@ -105,11 +132,9 @@ const Offline = {
         for (let z = 0; z < CHUNK_D; z++) {
           for (let y = 0; y < CHUNK_H; y++) {
             for (let x = 0; x < CHUNK_W; x++) {
-              const tileWZ = cz * CHUNK_D + z;   // z mundial (0..15)
+              const tileWZ = cz * CHUNK_D + z;
               let tileId = 0;
-              if (tileWZ === wz) {
-                tileId = 2;   // grama no andar do jogador
-              }
+              if (tileWZ === wz) tileId = grassId;
               tiles.push({ id: tileId, flags: 0 });
             }
           }
@@ -158,7 +183,7 @@ const Offline = {
       });
       const pos = state.player.position;
       Offline.createdChunkIds.clear();
-      Offline.generateChunksAround(pos.x, pos.y, pos.z, 1);
+      Offline.generateChunksAround(pos.x, pos.y, pos.z, 1, Offline.GRASS_ID);
       gameClient.world.referenceTileNeighbours();
       const startPos = new Position(pos.x, pos.y, pos.z);
       gameClient.handleAcceptLogin({
