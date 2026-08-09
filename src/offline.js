@@ -92,8 +92,8 @@ const Offline = {
       speed: playerData.speed,
       position: startPos,
       equipment: playerData.equipment,
-      outfit: playerData.outfits[0],     // objeto único exigido por Creature
-      outfits: playerData.outfits,        // array completo
+      outfit: playerData.outfits[0],
+      outfits: playerData.outfits,
       mounts: playerData.mounts
     });
 
@@ -103,54 +103,55 @@ const Offline = {
     console.log("Sobrevivente está offline. O apocalipse começou.");
   },
 
+  // Gera um chão de grama ao redor da posição (cx, cy, z)
   generateGround: function(cx, cy, z, radius) {
     const world = gameClient.world;
     if (!world) return;
+
+    const CHUNK_W = Chunk.prototype.WIDTH;
+    const CHUNK_H = Chunk.prototype.HEIGHT;
+    const CHUNK_D = Chunk.prototype.DEPTH;
+    const TILES_PER_CHUNK = CHUNK_W * CHUNK_H * CHUNK_D;
+
+    // Conjunto para evitar recriar o mesmo chunk múltiplas vezes
+    const createdChunks = new Set();
 
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dy = -radius; dy <= radius; dy++) {
         let wx = cx + dx;
         let wy = cy + dy;
 
-        // Tenta obter o chunk existente ou cria um novo
-        let chunk = world.getChunkFromWorldPosition({x: wx, y: wy, z: z});
-        if (!chunk) {
-          // Cria um chunk genérico (as propriedades estáticas de Chunk já estão definidas)
-          chunk = new Chunk(
-            wx - (wx % Chunk.prototype.WIDTH),
-            wy - (wy % Chunk.prototype.HEIGHT),
-            z - (z % Chunk.prototype.DEPTH)
-          );
-          // Adiciona o chunk ao mundo
-          if (typeof world.setChunk === 'function') {
-            world.setChunk(chunk);
-          } else {
-            // Fallback: guarda no mapa interno do World (assume world.chunks como objeto)
-            let chunkX = Math.floor(wx / Chunk.prototype.WIDTH);
-            let chunkY = Math.floor(wy / Chunk.prototype.HEIGHT);
-            let chunkZ = Math.floor(z / Chunk.prototype.DEPTH);
-            if (!world.chunks) world.chunks = {};
-            let key = chunkX + "," + chunkY + "," + chunkZ;
-            world.chunks[key] = chunk;
-          }
+        // Verifica se o chunk já existe
+        let existingChunk = world.getChunkFromWorldPosition({x: wx, y: wy, z: z});
+        if (existingChunk) continue;  // já tem tiles, pula
+
+        // Calcula o canto do chunk (múltiplo das dimensões)
+        let chunkStartX = wx - (wx % CHUNK_W);
+        let chunkStartY = wy - (wy % CHUNK_H);
+        let chunkStartZ = z - (z % CHUNK_D);
+
+        // Cria uma chave única para este chunk
+        let key = Math.floor(chunkStartX / CHUNK_W) + "," + Math.floor(chunkStartY / CHUNK_H) + "," + Math.floor(chunkStartZ / CHUNK_D);
+        if (createdChunks.has(key)) continue;
+        createdChunks.add(key);
+
+        // Cria um array de tiles vazio com tamanho TILES_PER_CHUNK
+        let tilesArray = new Array(TILES_PER_CHUNK);
+        for (let i = 0; i < TILES_PER_CHUNK; i++) {
+          tilesArray[i] = { id: 2, flags: 0 };  // grama
         }
 
-        // Cria o tile de grama
-        let tile = new Tile({id: 2, flags: 0}, new Position(wx, wy, z));
+        // Cria o chunk com a posição correta (em índices de chunk)
+        let chunkPos = new Position(Math.floor(chunkStartX / CHUNK_W), Math.floor(chunkStartY / CHUNK_H), Math.floor(chunkStartZ / CHUNK_D));
+        let newChunk = new Chunk(null, chunkPos, tilesArray);
 
-        // Calcula a posição local dentro do chunk
-        let localX = wx - chunk.getStartX();
-        let localY = wy - chunk.getStartY();
-        let localZ = z - chunk.getStartZ();
-
-        // Insere o tile
-        if (typeof chunk.setTile === 'function') {
-          chunk.setTile(localX, localY, localZ, tile);
+        // Adiciona o chunk ao mundo
+        if (typeof world.setChunk === 'function') {
+          world.setChunk(newChunk);
         } else {
-          if (!chunk.tiles) chunk.tiles = [];
-          if (!chunk.tiles[localX]) chunk.tiles[localX] = [];
-          if (!chunk.tiles[localX][localY]) chunk.tiles[localX][localY] = [];
-          chunk.tiles[localX][localY][localZ] = tile;
+          // Fallback: armazena no mapa world.chunks
+          if (!world.chunks) world.chunks = {};
+          world.chunks[key] = newChunk;
         }
       }
     }
