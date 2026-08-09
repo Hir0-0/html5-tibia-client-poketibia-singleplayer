@@ -1,5 +1,5 @@
 // ==========================================
-// offline.js – Geração procedural com depuração
+// offline.js – Chunks gerados corretamente no array world.chunks
 // ==========================================
 
 const Offline = {
@@ -28,7 +28,7 @@ const Offline = {
     mounts: []
   },
 
-  createdChunks: new Set(),
+  createdChunkIds: new Set(),
 
   start: function() {
     console.log("Offline.start() executado");
@@ -51,19 +51,7 @@ const Offline = {
     });
 
     const pos = this.startPosition;
-    this.generateChunksAround(pos.x, pos.y, pos.z, 2);
-
-    // Verificação imediata
-    const world = gameClient.world;
-    const testPos = { x: pos.x, y: pos.y, z: pos.z };
-    console.log("Procurando chunk em:", testPos);
-    const chunk = world.getChunkFromWorldPosition(testPos);
-    console.log("Chunk encontrado:", chunk);
-
-    // Se ainda for null, imprime as chaves dos chunks armazenados (se existir world.chunks)
-    if (!chunk && world.chunks) {
-      console.log("Chunks existentes:", Object.keys(world.chunks));
-    }
+    this.generateChunksAround(pos.x, pos.y, pos.z, 1);  // raio 1 (3x3 chunks)
 
     const startPos = new Position(pos.x, pos.y, pos.z);
     const pdata = this.playerData;
@@ -86,51 +74,52 @@ const Offline = {
   },
 
   generateChunksAround: function(wx, wy, wz, radius) {
+    const world = gameClient.world;
     const CHUNK_W = this.worldConfig.chunk.width;
     const CHUNK_H = this.worldConfig.chunk.height;
     const CHUNK_D = this.worldConfig.chunk.depth;
 
-    const centerCX = Math.floor(wx / CHUNK_W);
-    const centerCY = Math.floor(wy / CHUNK_H);
-    const centerCZ = Math.floor(wz / CHUNK_D);
+    // Posição do setor (usando o método do mundo)
+    const sectorPos = world.getChunkPositionFromWorldPosition({x: wx, y: wy, z: wz});
+    const sx = sectorPos.x;
+    const sy = sectorPos.y;
+    const sz = sectorPos.z;   // para z<8 será 0
 
-    console.log("Gerando chunks ao redor de cx=%d cy=%d cz=%d", centerCX, centerCY, centerCZ);
+    console.log("Setor central:", sx, sy, sz);
 
-    const world = gameClient.world;
-    for (let dcx = -radius; dcx <= radius; dcx++) {
-      for (let dcy = -radius; dcy <= radius; dcy++) {
-        const cx = centerCX + dcx;
-        const cy = centerCY + dcy;
-        const cz = centerCZ;
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        const cx = sx + dx;
+        const cy = sy + dy;
+        const cz = sz;   // todos os chunks no mesmo nível vertical
 
-        const key = cx + "," + cy + "," + cz;
-        if (this.createdChunks.has(key)) continue;
-        this.createdChunks.add(key);
+        // Verifica se o chunk já foi criado (usando o id único)
+        const chunkPos = new Position(cx, cy, cz);
+        const chunkId = world.getChunkIndex(chunkPos);
+        if (this.createdChunkIds.has(chunkId)) continue;
+        this.createdChunkIds.add(chunkId);
 
+        // Cria os tiles (apenas o andar do jogador (7) recebe grama)
         const tiles = [];
         for (let z = 0; z < CHUNK_D; z++) {
           for (let y = 0; y < CHUNK_H; y++) {
             for (let x = 0; x < CHUNK_W; x++) {
-              const tileWZ = cz * CHUNK_D + z;
+              const tileWZ = cz * CHUNK_D + z;   // world Z
               let tileId = 0;
               if (tileWZ === wz) {
-                tileId = 2; // grama
+                tileId = 2;   // grama
               }
               tiles.push({ id: tileId, flags: 0 });
             }
           }
         }
 
-        const chunkPos = new Position(cx, cy, cz);
         const chunk = new Chunk(null, chunkPos, tiles);
+        chunk.id = chunkId;   // define o id para ser encontrado por findChunk
 
-        if (typeof world.setChunk === 'function') {
-          world.setChunk(chunk);
-        } else {
-          if (!world.chunks) world.chunks = {};
-          world.chunks[key] = chunk;
-        }
-        console.log("Chunk criado:", key);
+        // Adiciona ao array de chunks do mundo
+        world.chunks.push(chunk);
+        console.log("Chunk adicionado: id=%d, pos=(%d,%d,%d)", chunkId, cx, cy, cz);
       }
     }
   },
@@ -170,8 +159,8 @@ const Offline = {
         width: Offline.worldConfig.width, height: Offline.worldConfig.height, depth: Offline.worldConfig.depth
       });
       const pos = state.player.position;
-      Offline.createdChunks.clear();
-      Offline.generateChunksAround(pos.x, pos.y, pos.z, 2);
+      Offline.createdChunkIds.clear();
+      Offline.generateChunksAround(pos.x, pos.y, pos.z, 1);
       const startPos = new Position(pos.x, pos.y, pos.z);
       gameClient.handleAcceptLogin({
         id: state.player.id, name: state.player.name, sex: state.player.sex,
