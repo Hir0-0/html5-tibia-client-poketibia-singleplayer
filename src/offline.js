@@ -4,11 +4,11 @@
 
 const Offline = {
   
-  // Estado padrão do jogo (nosso "save inicial")
+  // Estado padrão do jogo (coordenadas puras, sem métodos)
   defaultState: {
     player: {
       id: 1,
-      name: "Pokétrainer",
+      name: "Sobrevivente",
       sex: 0,
       level: 1,
       experience: 0,
@@ -38,18 +38,15 @@ const Offline = {
     }
   },
 
-  // Inicializa o jogo em modo offline
   start: function() {
     console.log("Offline.start() executado");
 
-    // Carrega os assets automaticamente (se não estiverem prontos)
     if (!gameClient.interface.areAssetsLoaded()) {
       gameClient.networkManager.loadGameFilesServer();
       setTimeout(() => Offline.start(), 500);
       return;
     }
 
-    // Simula o pacote setServerData
     let worldData = Offline.defaultState.world;
     gameClient.setServerData({
       clientVersion: worldData.clientVersion,
@@ -62,8 +59,10 @@ const Offline = {
       depth: worldData.depth
     });
 
-    // Simula o pacote LOGIN_SUCCESS
     let playerData = Offline.defaultState.player;
+    // CRIA UM OBJETO Position VÁLIDO
+    let startPos = new Position(playerData.position.x, playerData.position.y, playerData.position.z);
+
     gameClient.handleAcceptLogin({
       id: playerData.id,
       name: playerData.name,
@@ -76,26 +75,22 @@ const Offline = {
       maxMana: playerData.maxMana,
       capacity: playerData.capacity,
       speed: playerData.speed,
-      position: playerData.position,
+      position: startPos,
       equipment: playerData.equipment,
       outfits: playerData.outfits,
       mounts: playerData.mounts
     });
 
-    // GERA O CHÃO AO REDOR DO JOGADOR
-    Offline.generateGround(100, 100, 7, 30);
-
-    // Força a atualização da cache de tiles
+    // Gera o chão ao redor
+    Offline.generateGround(playerData.position.x, playerData.position.y, playerData.position.z, 30);
     gameClient.renderer.updateTileCache();
 
-    // Mostra os botões de save/load
     document.getElementById("save-button").style.display = "inline-block";
     document.getElementById("load-button").style.display = "inline-block";
 
-    console.log("Pokétibia offline iniciado! Bom jogo.");
+    console.log("Sobrevivente está offline. O apocalipse começou.");
   },
 
-  // Gera grama (ID 2) num quadrado ao redor de (cx, cy, z)
   generateGround: function(cx, cy, z, radius) {
     const world = gameClient.world;
     if (!world) return;
@@ -105,15 +100,11 @@ const Offline = {
         let wx = cx + dx;
         let wy = cy + dy;
 
-        // Obtém o chunk correspondente
         let chunk = world.getChunkFromWorldPosition({x: wx, y: wy, z: z});
         if (!chunk) continue;
 
-        // Cria um tile com ID de grama (2) e flags 0
-        let tile = new Tile({id: 2, flags: 0}, {x: wx, y: wy, z: z});
+        let tile = new Tile({id: 2, flags: 0}, new Position(wx, wy, z));
 
-        // Adiciona o tile ao chunk. Verifique se chunk.setTile existe.
-        // Se não existir, tente chunk.tiles[localX][localY][localZ] = tile.
         let localX = wx - chunk.getStartX();
         let localY = wy - chunk.getStartY();
         let localZ = z - chunk.getStartZ();
@@ -121,7 +112,6 @@ const Offline = {
         if (typeof chunk.setTile === 'function') {
           chunk.setTile(localX, localY, localZ, tile);
         } else {
-          // Fallback: acesso direto à matriz
           if (!chunk.tiles) chunk.tiles = [];
           if (!chunk.tiles[localX]) chunk.tiles[localX] = [];
           if (!chunk.tiles[localX][localY]) chunk.tiles[localX][localY] = [];
@@ -131,8 +121,8 @@ const Offline = {
     }
   },
 
-  // Salva o estado atual em um arquivo JSON
   save: function() {
+    let pos = gameClient.player.getPosition();
     let state = {
       player: {
         id: gameClient.player.id,
@@ -146,7 +136,7 @@ const Offline = {
         maxMana: gameClient.player.state.maxMana,
         capacity: gameClient.player.state.capacity,
         speed: gameClient.player.state.speed,
-        position: gameClient.player.getPosition(),
+        position: { x: pos.x, y: pos.y, z: pos.z },
         equipment: gameClient.player.equipment,
         outfits: gameClient.player.outfits,
         mounts: gameClient.player.mounts
@@ -160,21 +150,17 @@ const Offline = {
     
     let a = document.createElement("a");
     a.href = url;
-    a.download = "poketibia-save.json";
+    a.download = "sobrevivencia-save.json";
     a.click();
     URL.revokeObjectURL(url);
   },
 
-  // Carrega um estado de um arquivo JSON
   load: function(file) {
     let reader = new FileReader();
     reader.onload = function(e) {
       let state = JSON.parse(e.target.result);
-      
-      // Reinicia o jogo com os dados carregados
       gameClient.reset();
       
-      // Reaplica os dados do mundo (fixos por enquanto)
       let worldData = Offline.defaultState.world;
       gameClient.setServerData({
         clientVersion: worldData.clientVersion,
@@ -187,7 +173,7 @@ const Offline = {
         depth: worldData.depth
       });
 
-      // Cria o jogador com os dados salvos
+      let pos = new Position(state.player.position.x, state.player.position.y, state.player.position.z);
       gameClient.handleAcceptLogin({
         id: state.player.id,
         name: state.player.name,
@@ -200,34 +186,29 @@ const Offline = {
         maxMana: state.player.maxMana,
         capacity: state.player.capacity,
         speed: state.player.speed,
-        position: state.player.position,
+        position: pos,
         equipment: state.player.equipment,
         outfits: state.player.outfits,
         mounts: state.player.mounts
       });
 
-      // Gera o chão ao redor da nova posição
-      let pos = state.player.position;
-      Offline.generateGround(pos.x, pos.y, pos.z, 30);
+      Offline.generateGround(state.player.position.x, state.player.position.y, state.player.position.z, 30);
       gameClient.renderer.updateTileCache();
 
       document.getElementById("save-button").style.display = "inline-block";
       document.getElementById("load-button").style.display = "inline-block";
-      console.log("Jogo carregado do save.");
+      console.log("Jogo carregado.");
     };
     reader.readAsText(file);
   }
 };
 
-// Adiciona os listeners assim que o DOM estiver pronto
 document.addEventListener("DOMContentLoaded", function() {
   document.getElementById("save-button")?.addEventListener("click", Offline.save);
   document.getElementById("load-button")?.addEventListener("click", function() {
     document.getElementById("load-file-input").click();
   });
   document.getElementById("load-file-input")?.addEventListener("change", function(e) {
-    if (e.target.files[0]) {
-      Offline.load(e.target.files[0]);
-    }
+    if (e.target.files[0]) Offline.load(e.target.files[0]);
   });
 });
