@@ -1,10 +1,9 @@
 // ==========================================
-// offline.js – Geração procedural de chunks
+// offline.js – Geração procedural de chunks (corrigida)
 // ==========================================
 
 const Offline = {
 
-  // Configurações do mundo
   worldConfig: {
     width: 2048,
     height: 2048,
@@ -16,7 +15,6 @@ const Offline = {
     tick: 50
   },
 
-  // Posição inicial do jogador (z=7 é superfície)
   startPosition: { x: 100, y: 100, z: 7 },
 
   playerData: {
@@ -48,7 +46,6 @@ const Offline = {
     mounts: []
   },
 
-  // Conjunto para rastrear chunks já criados (evitar duplicação)
   createdChunks: new Set(),
 
   start: function() {
@@ -60,7 +57,6 @@ const Offline = {
       return;
     }
 
-    // Configura o mundo
     gameClient.setServerData({
       clientVersion: this.worldConfig.clientVersion,
       version: this.worldConfig.version,
@@ -72,11 +68,16 @@ const Offline = {
       depth: this.worldConfig.depth
     });
 
-    // Gera chunks iniciais ao redor da posição do jogador
-    this.generateChunksAround(this.startPosition.x, this.startPosition.y, this.startPosition.z, 2);
+    // Gera chunks ao redor da posição inicial
+    const pos = this.startPosition;
+    this.generateChunksAround(pos.x, pos.y, pos.z, 2);
+
+    // Depuração: verifica se o chunk do jogador foi criado
+    const playerChunk = gameClient.world.getChunkFromWorldPosition(pos);
+    console.log("Chunk do jogador:", playerChunk);
 
     // Cria o jogador
-    const pos = new Position(this.startPosition.x, this.startPosition.y, this.startPosition.z);
+    const startPos = new Position(pos.x, pos.y, pos.z);
     const pdata = this.playerData;
     gameClient.handleAcceptLogin({
       id: pdata.id,
@@ -90,7 +91,7 @@ const Offline = {
       maxMana: pdata.maxMana,
       capacity: pdata.capacity,
       speed: pdata.speed,
-      position: pos,
+      position: startPos,
       equipment: pdata.equipment,
       outfit: pdata.outfits[0],
       outfits: pdata.outfits,
@@ -102,53 +103,48 @@ const Offline = {
     console.log("Sobrevivente está offline. O apocalipse começou.");
   },
 
-  // Gera chunks num raio de 'radius' chunks ao redor das coordenadas mundiais
   generateChunksAround: function(wx, wy, wz, radius) {
-    const CHUNK_W = this.worldConfig.chunk.width;   // 32
-    const CHUNK_H = this.worldConfig.chunk.height;  // 32
-    const CHUNK_D = this.worldConfig.chunk.depth;   // 4
+    const CHUNK_W = this.worldConfig.chunk.width;
+    const CHUNK_H = this.worldConfig.chunk.height;
+    const CHUNK_D = this.worldConfig.chunk.depth;
 
-    // Converte coordenadas mundiais para índices de chunk
+    // Índices de chunk baseados na posição do jogador
     const centerCX = Math.floor(wx / CHUNK_W);
     const centerCY = Math.floor(wy / CHUNK_H);
-    const centerCZ = Math.floor(wz / CHUNK_D);
+    const centerCZ = Math.floor(wz / CHUNK_D);   // <-- CORRIGIDO: usa wz, não 0
 
     for (let dcx = -radius; dcx <= radius; dcx++) {
       for (let dcy = -radius; dcy <= radius; dcy++) {
         const cx = centerCX + dcx;
         const cy = centerCY + dcy;
-        const cz = 0;  // mantemos um único nível de chunks (z=0)
+        const cz = centerCZ;   // mantém o mesmo nível Z do jogador
 
         const key = cx + "," + cy + "," + cz;
-        if (this.createdChunks.has(key)) continue;  // já existe
+        if (this.createdChunks.has(key)) continue;
         this.createdChunks.add(key);
 
-        // Cria um array de tiles para um chunk inteiro (32x32x4)
+        // Cria um array de tiles para o chunk inteiro
         const tiles = [];
         for (let z = 0; z < CHUNK_D; z++) {
           for (let y = 0; y < CHUNK_H; y++) {
             for (let x = 0; x < CHUNK_W; x++) {
-              // Calcular coordenadas mundiais do tile
               const tileWX = cx * CHUNK_W + x;
               const tileWY = cy * CHUNK_H + y;
               const tileWZ = cz * CHUNK_D + z;
 
-              // Por enquanto, apenas o andar da superfície (z=7) recebe grama
-              // outros andares são vazios (id=0)
+              // Apenas o andar exato do jogador recebe grama
               let tileId = 0;
-              if (tileWZ === 7) {
-                tileId = 2;  // grama (ID 2 no Tibia 7.4)
+              if (tileWZ === wz) {
+                tileId = 2;  // grama
               }
               tiles.push({ id: tileId, flags: 0 });
             }
           }
         }
 
-        // Cria o chunk
         const chunkPos = new Position(cx, cy, cz);
         const chunk = new Chunk(null, chunkPos, tiles);
 
-        // Adiciona ao mundo
         const world = gameClient.world;
         if (typeof world.setChunk === 'function') {
           world.setChunk(chunk);
@@ -210,7 +206,6 @@ const Offline = {
         depth: Offline.worldConfig.depth
       });
 
-      // Gera chunks ao redor da posição carregada
       const pos = state.player.position;
       Offline.createdChunks.clear();
       Offline.generateChunksAround(pos.x, pos.y, pos.z, 2);
