@@ -73,6 +73,11 @@ const Offline = {
     // CRIA UM OBJETO Position VÁLIDO
     let startPos = new Position(playerData.position.x, playerData.position.y, playerData.position.z);
 
+    // Gera o chão ao redor
+    Offline.generateGround(playerData.position.x, playerData.position.y, playerData.position.z, 30);
+    gameClient.renderer.updateTileCache();
+
+    
     gameClient.handleAcceptLogin({
       id: playerData.id,
       name: playerData.name,
@@ -92,9 +97,6 @@ const Offline = {
       mounts: playerData.mounts
     });
 
-    // Gera o chão ao redor
-    Offline.generateGround(playerData.position.x, playerData.position.y, playerData.position.z, 30);
-    gameClient.renderer.updateTileCache();
 
     document.getElementById("save-button").style.display = "inline-block";
     document.getElementById("load-button").style.display = "inline-block";
@@ -103,35 +105,52 @@ const Offline = {
   },
 
   generateGround: function(cx, cy, z, radius) {
-    const world = gameClient.world;
-    if (!world) return;
+  const world = gameClient.world;
+  if (!world) return;
 
-    for (let dx = -radius; dx <= radius; dx++) {
-      for (let dy = -radius; dy <= radius; dy++) {
-        let wx = cx + dx;
-        let wy = cy + dy;
+  for (let dx = -radius; dx <= radius; dx++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      let wx = cx + dx;
+      let wy = cy + dy;
 
-        let chunk = world.getChunkFromWorldPosition({x: wx, y: wy, z: z});
-        if (!chunk) continue;
-
-        let tile = new Tile({id: 2, flags: 0}, new Position(wx, wy, z));
-
-        let localX = wx - chunk.getStartX();
-        let localY = wy - chunk.getStartY();
-        let localZ = z - chunk.getStartZ();
-
-        if (typeof chunk.setTile === 'function') {
-          chunk.setTile(localX, localY, localZ, tile);
+      // Obtém ou cria o chunk
+      let chunk = world.getChunkFromWorldPosition({x: wx, y: wy, z: z});
+      if (!chunk) {
+        // Cria um chunk novo se não existir
+        chunk = new Chunk(wx - (wx % Chunk.prototype.WIDTH), wy - (wy % Chunk.prototype.HEIGHT), z - (z % Chunk.prototype.DEPTH));
+        // Adiciona o chunk ao mundo (precisa de um método setChunk; vamos ver como o World gerencia)
+        // Vamos usar world.setChunk se existir, senão world.chunks[...] = chunk
+        if (typeof world.setChunk === 'function') {
+          world.setChunk(chunk);
         } else {
-          if (!chunk.tiles) chunk.tiles = [];
-          if (!chunk.tiles[localX]) chunk.tiles[localX] = [];
-          if (!chunk.tiles[localX][localY]) chunk.tiles[localX][localY] = [];
-          chunk.tiles[localX][localY][localZ] = tile;
+          // Acesso direto (comum em engines simples)
+          let chunkX = Math.floor(wx / Chunk.prototype.WIDTH);
+          let chunkY = Math.floor(wy / Chunk.prototype.HEIGHT);
+          let chunkZ = Math.floor(z / Chunk.prototype.DEPTH);
+          if (!world.chunks) world.chunks = {};
+          let key = chunkX + "," + chunkY + "," + chunkZ;
+          world.chunks[key] = chunk;
         }
       }
-    }
-  },
 
+      let tile = new Tile({id: 2, flags: 0}, new Position(wx, wy, z));
+
+      let localX = wx - chunk.getStartX();
+      let localY = wy - chunk.getStartY();
+      let localZ = z - chunk.getStartZ();
+
+      if (typeof chunk.setTile === 'function') {
+        chunk.setTile(localX, localY, localZ, tile);
+      } else {
+        if (!chunk.tiles) chunk.tiles = [];
+        if (!chunk.tiles[localX]) chunk.tiles[localX] = [];
+        if (!chunk.tiles[localX][localY]) chunk.tiles[localX][localY] = [];
+        chunk.tiles[localX][localY][localZ] = tile;
+      }
+    }
+  }
+}
+    
   save: function() {
     let pos = gameClient.player.getPosition();
     let state = {
@@ -183,7 +202,9 @@ const Offline = {
         height: worldData.height,
         depth: worldData.depth
       });
-
+      Offline.generateGround(state.player.position.x, state.player.position.y, state.player.position.z, 30);
+      gameClient.renderer.updateTileCache();
+      
       let pos = new Position(state.player.position.x, state.player.position.y, state.player.position.z);
       gameClient.handleAcceptLogin({
         id: state.player.id,
@@ -204,8 +225,7 @@ const Offline = {
         mounts: state.player.mounts
       });
 
-      Offline.generateGround(state.player.position.x, state.player.position.y, state.player.position.z, 30);
-      gameClient.renderer.updateTileCache();
+      
 
       document.getElementById("save-button").style.display = "inline-block";
       document.getElementById("load-button").style.display = "inline-block";
