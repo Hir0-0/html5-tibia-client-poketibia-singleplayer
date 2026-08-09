@@ -1,10 +1,9 @@
 // ==========================================
-// offline.js – Inicializador single-player
+// offline.js – Single-player com mapa estático
 // ==========================================
 
 const Offline = {
   
-  // Estado padrão do jogo (coordenadas puras, sem métodos)
   defaultState: {
     player: {
       id: 1,
@@ -18,7 +17,7 @@ const Offline = {
       maxMana: 50,
       capacity: 50000,
       speed: 200,
-      position: { x: 100, y: 100, z: 7 },
+      position: { x: 5, y: 5, z: 0 },   // centro do mapa 10x10
       equipment: {
         head: null, neck: null, backpack: null, armor: null,
         right: null, left: null, legs: null, feet: null, ring: null
@@ -36,16 +35,25 @@ const Offline = {
       mounts: []
     },
     world: {
-      width: 2048,
-      height: 2048,
-      depth: 16,
-      chunk: { width: 32, height: 32, depth: 4 },
-      version: 740,
-      clientVersion: 740,
-      clock: 1,
-      tick: 50
+      width: 10, height: 10, depth: 1,     // mundo pequeno, sem andares
+      chunk: { width: 10, height: 10, depth: 1 },
+      version: 740, clientVersion: 740, clock: 1, tick: 50
     }
   },
+
+  // Mapa estático: 0 = vazio, 1 = grama, 2 = parede, etc.
+  staticMap: [
+    [2,2,2,2,2,2,2,2,2,2],
+    [2,1,1,1,1,1,1,1,1,2],
+    [2,1,1,1,1,1,1,1,1,2],
+    [2,1,1,1,1,1,1,1,1,2],
+    [2,1,1,1,1,1,1,1,1,2],
+    [2,1,1,1,1,1,1,1,1,2],
+    [2,1,1,1,1,1,1,1,1,2],
+    [2,1,1,1,1,1,1,1,1,2],
+    [2,1,1,1,1,1,1,1,1,2],
+    [2,2,2,2,2,2,2,2,2,2]
+  ],
 
   start: function() {
     console.log("Offline.start() executado");
@@ -68,16 +76,12 @@ const Offline = {
       depth: worldData.depth
     });
 
-    let playerData = Offline.defaultState.player;
-    console.log("Dados do jogador:", JSON.stringify(playerData, null, 2));
+    // Construir o mundo a partir do mapa estático
+    Offline.buildWorldFromStaticMap();
 
-    // CRIA UM OBJETO Position VÁLIDO
+    let playerData = Offline.defaultState.player;
     let startPos = new Position(playerData.position.x, playerData.position.y, playerData.position.z);
 
-    // Gera o chão AO REDOR ANTES de criar o jogador
-    Offline.generateGround(playerData.position.x, playerData.position.y, playerData.position.z, 30);
-
-    // handleAcceptLogin já chama updateTileCache internamente (não precisamos chamar aqui)
     gameClient.handleAcceptLogin({
       id: playerData.id,
       name: playerData.name,
@@ -99,61 +103,40 @@ const Offline = {
 
     document.getElementById("save-button").style.display = "inline-block";
     document.getElementById("load-button").style.display = "inline-block";
-
     console.log("Sobrevivente está offline. O apocalipse começou.");
   },
 
-  // Gera um chão de grama ao redor da posição (cx, cy, z)
-  generateGround: function(cx, cy, z, radius) {
-    const world = gameClient.world;
-    if (!world) return;
+  // Converte o array 2D em um único chunk (já que o mundo é pequeno)
+  buildWorldFromStaticMap: function() {
+    const map = Offline.staticMap;
+    const width = map[0].length;
+    const height = map.length;
+    const depth = 1;   // apenas um andar
 
-    const CHUNK_W = Chunk.prototype.WIDTH;
-    const CHUNK_H = Chunk.prototype.HEIGHT;
-    const CHUNK_D = Chunk.prototype.DEPTH;
-    const TILES_PER_CHUNK = CHUNK_W * CHUNK_H * CHUNK_D;
-
-    // Conjunto para evitar recriar o mesmo chunk múltiplas vezes
-    const createdChunks = new Set();
-
-    for (let dx = -radius; dx <= radius; dx++) {
-      for (let dy = -radius; dy <= radius; dy++) {
-        let wx = cx + dx;
-        let wy = cy + dy;
-
-        // Verifica se o chunk já existe
-        let existingChunk = world.getChunkFromWorldPosition({x: wx, y: wy, z: z});
-        if (existingChunk) continue;  // já tem tiles, pula
-
-        // Calcula o canto do chunk (múltiplo das dimensões)
-        let chunkStartX = wx - (wx % CHUNK_W);
-        let chunkStartY = wy - (wy % CHUNK_H);
-        let chunkStartZ = z - (z % CHUNK_D);
-
-        // Cria uma chave única para este chunk
-        let key = Math.floor(chunkStartX / CHUNK_W) + "," + Math.floor(chunkStartY / CHUNK_H) + "," + Math.floor(chunkStartZ / CHUNK_D);
-        if (createdChunks.has(key)) continue;
-        createdChunks.add(key);
-
-        // Cria um array de tiles vazio com tamanho TILES_PER_CHUNK
-        let tilesArray = new Array(TILES_PER_CHUNK);
-        for (let i = 0; i < TILES_PER_CHUNK; i++) {
-          tilesArray[i] = { id: 2, flags: 0 };  // grama
-        }
-
-        // Cria o chunk com a posição correta (em índices de chunk)
-        let chunkPos = new Position(Math.floor(chunkStartX / CHUNK_W), Math.floor(chunkStartY / CHUNK_H), Math.floor(chunkStartZ / CHUNK_D));
-        let newChunk = new Chunk(null, chunkPos, tilesArray);
-
-        // Adiciona o chunk ao mundo
-        if (typeof world.setChunk === 'function') {
-          world.setChunk(newChunk);
-        } else {
-          // Fallback: armazena no mapa world.chunks
-          if (!world.chunks) world.chunks = {};
-          world.chunks[key] = newChunk;
+    // Cria um array de tiles no formato esperado: {id, flags}
+    let tilesArray = [];
+    for (let z = 0; z < depth; z++) {
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          let tileId = map[y][x];
+          // Para simplificar: id=0 é vazio (não renderiza), id=1 é grama, id=2 é parede
+          tilesArray.push({ id: tileId, flags: 0 });
         }
       }
+    }
+
+    // O mundo tem apenas um chunk, posição (0,0,0)
+    let chunkPos = new Position(0, 0, 0);
+    let chunk = new Chunk(null, chunkPos, tilesArray);
+
+    // Adiciona o chunk ao mundo
+    const world = gameClient.world;
+    if (typeof world.setChunk === 'function') {
+      world.setChunk(chunk);
+    } else {
+      // Fallback: armazena no mapa world.chunks
+      if (!world.chunks) world.chunks = {};
+      world.chunks["0,0,0"] = chunk;
     }
   },
 
@@ -180,11 +163,9 @@ const Offline = {
       },
       timestamp: new Date().toISOString()
     };
-
     let json = JSON.stringify(state, null, 2);
     let blob = new Blob([json], { type: "application/json" });
     let url = URL.createObjectURL(blob);
-    
     let a = document.createElement("a");
     a.href = url;
     a.download = "sobrevivencia-save.json";
@@ -210,9 +191,7 @@ const Offline = {
         depth: worldData.depth
       });
 
-      // Gera o chão ao redor da posição carregada
-      Offline.generateGround(state.player.position.x, state.player.position.y, state.player.position.z, 30);
-      // handleAcceptLogin já chama updateTileCache
+      Offline.buildWorldFromStaticMap();
       
       let pos = new Position(state.player.position.x, state.player.position.y, state.player.position.z);
       gameClient.handleAcceptLogin({
