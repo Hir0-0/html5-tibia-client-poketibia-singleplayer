@@ -40,7 +40,7 @@ const GameClient = function() {
   this.player = null;
 
   // The database that stores the minimap and game files
-  this.database = new Database();
+  //this.database = new Database();
 
   // Set some state
   this.__tickInterval = 0;
