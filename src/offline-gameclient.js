@@ -4,10 +4,9 @@
 
 const OfflineGameClient = {
 
-  // Lista de possíveis IDs de grama (tentaremos do primeiro ao último)
-  GRASS_CANDIDATES: [440, 101, 415, 106],
+  // IDs de grama testados e aprovados (walkable)
+  GRASS_CANDIDATES: [101, 415, 440], // 101 = tall grass, 415 = green grass, 440 = grass (alguns packs)
 
-  // ID que será usado após a verificação
   GRASS_ID: null,
 
   worldConfig: {
@@ -45,9 +44,9 @@ const OfflineGameClient = {
       return;
     }
 
-    // Escolhe o primeiro ID da lista que funcione (tenha frameGroups)
+    // Escolhe ID de grama walkable
     this.GRASS_ID = this.findWorkingGrassId();
-    console.log("ID da grama selecionado:", this.GRASS_ID);
+    console.log("ID da grama:", this.GRASS_ID);
 
     gameClient.setServerData({
       clientVersion: this.worldConfig.clientVersion,
@@ -81,27 +80,41 @@ const OfflineGameClient = {
       mounts: pdata.mounts
     });
 
+    // Corrigir limite de andares visíveis (máximo 8 para o renderizador)
+    gameClient.player.getMaxFloor = function() {
+      return 8; // cobre z=0 até z=7
+    };
+    // Forçar atualização do tile cache com o novo limite
+    gameClient.renderer.updateTileCache();
+
     document.getElementById("save-button").style.display = "inline-block";
     document.getElementById("load-button").style.display = "inline-block";
-    console.log("Sobrevivente está offline. O apocalipse começou.");
+    console.log("Sobrevivente está offline. Movimento liberado!");
   },
 
-  // Procura um ID que tenha frameGroups
+  // Encontra um ID que tenha frameGroups e seja walkable (não tenha DatFlagNotWalkable)
   findWorkingGrassId: function() {
     const objects = gameClient.dataObjects;
     for (const id of this.GRASS_CANDIDATES) {
       const obj = objects.get(id);
       if (obj && obj.frameGroups) {
-        return id;
+        // Verifica se o tile é caminhável (não tem flag NotWalkable)
+        if (!obj.hasFlag || !obj.hasFlag(PropBitFlag.prototype.flags.DatFlagNotWalkable)) {
+          return id;
+        }
       }
     }
-    // Fallback: varre do 100 ao 5000
+    // Fallback: varre do 100 ao 5000 atrás de um walkable com frameGroups
     for (let i = 100; i < 5000; i++) {
       const obj = objects.get(i);
-      if (obj && obj.frameGroups) return i;
+      if (obj && obj.frameGroups) {
+        if (!obj.hasFlag || !obj.hasFlag(PropBitFlag.prototype.flags.DatFlagNotWalkable)) {
+          return i;
+        }
+      }
     }
-    console.warn("Nenhum ID com frameGroups encontrado, usando 100");
-    return 100;
+    console.warn("Nenhum tile walkable encontrado, usando 101 como último recurso");
+    return 101;
   },
 
   disableMinimap: function() {
@@ -209,6 +222,9 @@ const OfflineGameClient = {
         outfits: state.player.outfits,
         mounts: state.player.mounts
       });
+      // Corrigir max floor também no load
+      gameClient.player.getMaxFloor = function() { return 8; };
+      gameClient.renderer.updateTileCache();
       document.getElementById("save-button").style.display = "inline-block";
       document.getElementById("load-button").style.display = "inline-block";
       console.log("Jogo carregado.");
@@ -217,7 +233,6 @@ const OfflineGameClient = {
   }
 };
 
-// Compatibilidade com interface.js (que chama OfflineGameClient.start)
 window.OfflineGameClient = OfflineGameClient;
 window.Offline = OfflineGameClient;
 
