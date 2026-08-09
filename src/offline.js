@@ -87,7 +87,7 @@ const Offline = {
       speed: playerData.speed,
       position: startPos,
       equipment: playerData.equipment,
-      outfits: playerData.outfits,
+      outfits: playerData.outfits[0],
       mounts: playerData.mounts
     });
 
