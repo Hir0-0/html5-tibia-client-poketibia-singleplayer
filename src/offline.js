@@ -1,41 +1,10 @@
 // ==========================================
-// offline.js – Correção definitiva (ID 100 e stubs nos protótipos)
+// offline.js – Versão estável (ID 100, stubs manuais)
 // ==========================================
-
-// Aplicar stubs ANTES de tudo (nos protótipos, se existirem)
-(function() {
-  // Minimap
-  if (typeof Minimap !== 'undefined') {
-    Minimap.prototype.cache = function() {};
-    Minimap.prototype.update = function() {};
-    Minimap.prototype.chunkUpdate = function() {};
-    Minimap.prototype.setRenderLayer = function() {};
-    Minimap.prototype.setCenter = function() {};
-    Minimap.prototype.save = function() {};
-  }
-  // Database
-  if (typeof Database !== 'undefined') {
-    Database.prototype.loadChunk = function() {};
-    Database.prototype.preloadCallback = function() {};
-    Database.prototype.clear = function() {};
-    Database.prototype.init = function() {};
-  }
-  // Thing (para evitar getMinimapColor quebrando)
-  if (typeof Thing !== 'undefined') {
-    const origGetMinimapColor = Thing.prototype.getMinimapColor;
-    Thing.prototype.getMinimapColor = function() {
-      try {
-        return origGetMinimapColor.call(this);
-      } catch(e) {
-        return 0; // cor preta como fallback
-      }
-    };
-  }
-})();
 
 const Offline = {
 
-  GRASS_ID: 100, // ID confirmado com frameGroups
+  GRASS_ID: 100, // ID válido com frameGroups
 
   worldConfig: {
     width: 2048, height: 2048, depth: 16,
@@ -83,6 +52,10 @@ const Offline = {
       depth: this.worldConfig.depth
     });
 
+    // Desabilitar minimap e database assim que as instâncias existirem
+    this.disableMinimap();
+    this.disableDatabase();
+
     console.log("Usando ID de grama:", this.GRASS_ID);
 
     this.generateChunksAround(this.startPosition.x, this.startPosition.y, this.startPosition.z, 1, this.GRASS_ID);
@@ -106,6 +79,18 @@ const Offline = {
     document.getElementById("save-button").style.display = "inline-block";
     document.getElementById("load-button").style.display = "inline-block";
     console.log("Sobrevivente está offline. O apocalipse começou.");
+  },
+
+  disableMinimap: function() {
+    const mm = gameClient.renderer?.minimap;
+    if (!mm) return;
+    mm.cache = mm.update = mm.chunkUpdate = mm.setRenderLayer = mm.setCenter = mm.save = function() {};
+  },
+
+  disableDatabase: function() {
+    const db = gameClient.database;
+    if (!db) return;
+    db.loadChunk = db.preloadCallback = db.clear = db.init = function() {};
   },
 
   generateChunksAround: function(wx, wy, wz, radius, grassId) {
@@ -181,6 +166,8 @@ const Offline = {
         chunk: Offline.worldConfig.chunk,
         width: Offline.worldConfig.width, height: Offline.worldConfig.height, depth: Offline.worldConfig.depth
       });
+      Offline.disableMinimap();
+      Offline.disableDatabase();
       const pos = state.player.position;
       Offline.createdChunkIds.clear();
       Offline.generateChunksAround(pos.x, pos.y, pos.z, 1, Offline.GRASS_ID);
