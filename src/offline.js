@@ -1,5 +1,5 @@
 // ==========================================
-// offline.js – Chunks de profundidade total (16 andares)
+// offline.js – Single player com chunks 32x32x16
 // ==========================================
 
 const Offline = {
@@ -7,8 +7,8 @@ const Offline = {
   worldConfig: {
     width: 2048,
     height: 2048,
-    depth: 16,            // 16 andares
-    chunk: { width: 32, height: 32, depth: 16 },  // chunk cobre toda profundidade
+    depth: 16,             // 16 andares
+    chunk: { width: 32, height: 32, depth: 16 },  // chunk cobre toda a profundidade
     version: 740,
     clientVersion: 740,
     clock: 1,
@@ -44,7 +44,6 @@ const Offline = {
       return;
     }
 
-    // Configura o mundo com profundidade total por chunk
     gameClient.setServerData({
       clientVersion: this.worldConfig.clientVersion,
       version: this.worldConfig.version,
@@ -53,11 +52,14 @@ const Offline = {
       chunk: this.worldConfig.chunk,   // { width:32, height:32, depth:16 }
       width: this.worldConfig.width,
       height: this.worldConfig.height,
-      depth: this.worldConfig.depth    // 16
+      depth: this.worldConfig.depth
     });
 
     const pos = this.startPosition;
     this.generateChunksAround(pos.x, pos.y, pos.z, 1);  // raio 1 (3x3 chunks)
+
+    // CRUCIAL: preenche os vizinhos dos tiles (necessário para o renderizador)
+    gameClient.world.referenceTileNeighbours();
 
     const startPos = new Position(pos.x, pos.y, pos.z);
     const pdata = this.playerData;
@@ -85,25 +87,20 @@ const Offline = {
     const CHUNK_H = this.worldConfig.chunk.height;
     const CHUNK_D = this.worldConfig.chunk.depth;   // 16
 
-    // Índices de setor: com profundidade total, só existe z=0
     const cxCenter = Math.floor(wx / CHUNK_W);
     const cyCenter = Math.floor(wy / CHUNK_H);
     const cz = 0;   // único setor vertical
-
-    console.log("Setor central:", cxCenter, cyCenter, cz);
 
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dy = -radius; dy <= radius; dy++) {
         const cx = cxCenter + dx;
         const cy = cyCenter + dy;
 
-        // Verifica se o chunk já existe
         const chunkPos = new Position(cx, cy, cz);
         const chunkId = world.getChunkIndex(chunkPos);
         if (this.createdChunkIds.has(chunkId)) continue;
         this.createdChunkIds.add(chunkId);
 
-        // Cria array de tiles: 32*32*16 = 16384 elementos
         const tiles = [];
         for (let z = 0; z < CHUNK_D; z++) {
           for (let y = 0; y < CHUNK_H; y++) {
@@ -119,10 +116,8 @@ const Offline = {
         }
 
         const chunk = new Chunk(null, chunkPos, tiles);
-        chunk.id = chunkId;   // necessário para a busca linear do mundo
-
+        chunk.id = chunkId;
         world.chunks.push(chunk);
-        console.log("Chunk adicionado: id=%d, pos=(%d,%d,%d)", chunkId, cx, cy, cz);
       }
     }
   },
@@ -164,6 +159,7 @@ const Offline = {
       const pos = state.player.position;
       Offline.createdChunkIds.clear();
       Offline.generateChunksAround(pos.x, pos.y, pos.z, 1);
+      gameClient.world.referenceTileNeighbours();
       const startPos = new Position(pos.x, pos.y, pos.z);
       gameClient.handleAcceptLogin({
         id: state.player.id, name: state.player.name, sex: state.player.sex,
