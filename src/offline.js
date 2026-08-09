@@ -76,8 +76,8 @@ const Offline = {
 
     // Gera o chão AO REDOR ANTES de criar o jogador
     Offline.generateGround(playerData.position.x, playerData.position.y, playerData.position.z, 30);
-    gameClient.renderer.updateTileCache();
 
+    // handleAcceptLogin já chama updateTileCache internamente (não precisamos chamar aqui)
     gameClient.handleAcceptLogin({
       id: playerData.id,
       name: playerData.name,
@@ -212,7 +212,7 @@ const Offline = {
 
       // Gera o chão ao redor da posição carregada
       Offline.generateGround(state.player.position.x, state.player.position.y, state.player.position.z, 30);
-      gameClient.renderer.updateTileCache();
+      // handleAcceptLogin já chama updateTileCache
       
       let pos = new Position(state.player.position.x, state.player.position.y, state.player.position.z);
       gameClient.handleAcceptLogin({
