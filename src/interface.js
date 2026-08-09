@@ -212,7 +212,7 @@ Interface.prototype.enterGame = function() {
    */
 
   // Inicia o jogo em modo offline
-  Offline.start();
+  OfflineGameClient.start();
 
 }
 
