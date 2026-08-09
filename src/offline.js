@@ -23,7 +23,9 @@ const Offline = {
         head: null, neck: null, backpack: null, armor: null,
         right: null, left: null, legs: null, feet: null, ring: null
       },
-      outfits: [{ looktype: 128, lookhead: 78, lookbody: 106, looklegs: 95, lookfeet: 76 }],
+      outfits: [
+  { id: 128, looktype: 128, lookhead: 78, lookbody: 106, looklegs: 95, lookfeet: 76, addons: 0 }
+],
       mounts: []
     },
     world: {
