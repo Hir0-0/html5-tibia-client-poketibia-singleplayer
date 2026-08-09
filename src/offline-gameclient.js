@@ -1,10 +1,14 @@
 // ==========================================
-// offline.js – Versão estável (ID 100, stubs manuais)
+// offline-gameclient.js – Game Client Offline
 // ==========================================
 
-const Offline = {
+const OfflineGameClient = {
 
-  GRASS_ID: 100, // ID válido com frameGroups
+  // Lista de possíveis IDs de grama (tentaremos do primeiro ao último)
+  GRASS_CANDIDATES: [440, 101, 415, 106],
+
+  // ID que será usado após a verificação
+  GRASS_ID: null,
 
   worldConfig: {
     width: 2048, height: 2048, depth: 16,
@@ -33,13 +37,17 @@ const Offline = {
   createdChunkIds: new Set(),
 
   start: function() {
-    console.log("Offline.start() executado");
+    console.log("OfflineGameClient iniciando…");
 
     if (!gameClient.interface.areAssetsLoaded()) {
       gameClient.networkManager.loadGameFilesServer();
-      setTimeout(() => Offline.start(), 500);
+      setTimeout(() => OfflineGameClient.start(), 500);
       return;
     }
+
+    // Escolhe o primeiro ID da lista que funcione (tenha frameGroups)
+    this.GRASS_ID = this.findWorkingGrassId();
+    console.log("ID da grama selecionado:", this.GRASS_ID);
 
     gameClient.setServerData({
       clientVersion: this.worldConfig.clientVersion,
@@ -52,11 +60,8 @@ const Offline = {
       depth: this.worldConfig.depth
     });
 
-    // Desabilitar minimap e database assim que as instâncias existirem
     this.disableMinimap();
     this.disableDatabase();
-
-    console.log("Usando ID de grama:", this.GRASS_ID);
 
     this.generateChunksAround(this.startPosition.x, this.startPosition.y, this.startPosition.z, 1, this.GRASS_ID);
     gameClient.world.referenceTileNeighbours();
@@ -79,6 +84,24 @@ const Offline = {
     document.getElementById("save-button").style.display = "inline-block";
     document.getElementById("load-button").style.display = "inline-block";
     console.log("Sobrevivente está offline. O apocalipse começou.");
+  },
+
+  // Procura um ID que tenha frameGroups
+  findWorkingGrassId: function() {
+    const objects = gameClient.dataObjects;
+    for (const id of this.GRASS_CANDIDATES) {
+      const obj = objects.get(id);
+      if (obj && obj.frameGroups) {
+        return id;
+      }
+    }
+    // Fallback: varre do 100 ao 5000
+    for (let i = 100; i < 5000; i++) {
+      const obj = objects.get(i);
+      if (obj && obj.frameGroups) return i;
+    }
+    console.warn("Nenhum ID com frameGroups encontrado, usando 100");
+    return 100;
   },
 
   disableMinimap: function() {
@@ -161,16 +184,17 @@ const Offline = {
       const state = JSON.parse(e.target.result);
       gameClient.reset();
       gameClient.setServerData({
-        clientVersion: Offline.worldConfig.clientVersion, version: Offline.worldConfig.version,
-        clock: Offline.worldConfig.clock, tick: Offline.worldConfig.tick,
-        chunk: Offline.worldConfig.chunk,
-        width: Offline.worldConfig.width, height: Offline.worldConfig.height, depth: Offline.worldConfig.depth
+        clientVersion: OfflineGameClient.worldConfig.clientVersion, version: OfflineGameClient.worldConfig.version,
+        clock: OfflineGameClient.worldConfig.clock, tick: OfflineGameClient.worldConfig.tick,
+        chunk: OfflineGameClient.worldConfig.chunk,
+        width: OfflineGameClient.worldConfig.width, height: OfflineGameClient.worldConfig.height, depth: OfflineGameClient.worldConfig.depth
       });
-      Offline.disableMinimap();
-      Offline.disableDatabase();
+      OfflineGameClient.disableMinimap();
+      OfflineGameClient.disableDatabase();
       const pos = state.player.position;
-      Offline.createdChunkIds.clear();
-      Offline.generateChunksAround(pos.x, pos.y, pos.z, 1, Offline.GRASS_ID);
+      OfflineGameClient.createdChunkIds.clear();
+      const grassId = OfflineGameClient.findWorkingGrassId();
+      OfflineGameClient.generateChunksAround(pos.x, pos.y, pos.z, 1, grassId);
       gameClient.world.referenceTileNeighbours();
       const startPos = new Position(pos.x, pos.y, pos.z);
       gameClient.handleAcceptLogin({
@@ -193,12 +217,16 @@ const Offline = {
   }
 };
 
+// Compatibilidade com interface.js (que chama OfflineGameClient.start)
+window.OfflineGameClient = OfflineGameClient;
+window.Offline = OfflineGameClient;
+
 document.addEventListener("DOMContentLoaded", function() {
-  document.getElementById("save-button")?.addEventListener("click", Offline.save);
+  document.getElementById("save-button")?.addEventListener("click", OfflineGameClient.save);
   document.getElementById("load-button")?.addEventListener("click", function() {
     document.getElementById("load-file-input").click();
   });
   document.getElementById("load-file-input")?.addEventListener("change", function(e) {
-    if (e.target.files[0]) Offline.load(e.target.files[0]);
+    if (e.target.files[0]) OfflineGameClient.load(e.target.files[0]);
   });
 });
