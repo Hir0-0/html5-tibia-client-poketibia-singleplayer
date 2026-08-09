@@ -1,5 +1,5 @@
 // ==========================================
-// offline.js – Single-player com mapa estático
+// offline.js – Single-player com mapa estático (32x32)
 // ==========================================
 
 const Offline = {
@@ -17,7 +17,7 @@ const Offline = {
       maxMana: 50,
       capacity: 50000,
       speed: 200,
-      position: { x: 5, y: 5, z: 0 },   // centro do mapa 10x10
+      position: { x: 16, y: 16, z: 7 },  // centro do mapa 32x32
       equipment: {
         head: null, neck: null, backpack: null, armor: null,
         right: null, left: null, legs: null, feet: null, ring: null
@@ -35,31 +35,25 @@ const Offline = {
       mounts: []
     },
     world: {
-      width: 10, height: 10, depth: 1,     // mundo pequeno, sem andares
-      chunk: { width: 10, height: 10, depth: 1 },
-      version: 740, clientVersion: 740, clock: 1, tick: 50
+      width: 2048,
+      height: 2048,
+      depth: 16,
+      chunk: { width: 32, height: 32, depth: 4 },
+      version: 740,
+      clientVersion: 740,
+      clock: 1,
+      tick: 50
     }
   },
-
-  // Mapa estático: 0 = vazio, 1 = grama, 2 = parede, etc.
-  staticMap: [
-    [2,2,2,2,2,2,2,2,2,2],
-    [2,1,1,1,1,1,1,1,1,2],
-    [2,1,1,1,1,1,1,1,1,2],
-    [2,1,1,1,1,1,1,1,1,2],
-    [2,1,1,1,1,1,1,1,1,2],
-    [2,1,1,1,1,1,1,1,1,2],
-    [2,1,1,1,1,1,1,1,1,2],
-    [2,1,1,1,1,1,1,1,1,2],
-    [2,1,1,1,1,1,1,1,1,2],
-    [2,2,2,2,2,2,2,2,2,2]
-  ],
 
   start: function() {
     console.log("Offline.start() executado");
 
+    // Tenta forçar o carregamento dos assets se ainda não estiverem prontos
     if (!gameClient.interface.areAssetsLoaded()) {
+      // Chama o carregador automático do servidor (busca em ./data/74/)
       gameClient.networkManager.loadGameFilesServer();
+      // Aguarda um pouco e tenta novamente
       setTimeout(() => Offline.start(), 500);
       return;
     }
@@ -76,7 +70,7 @@ const Offline = {
       depth: worldData.depth
     });
 
-    // Construir o mundo a partir do mapa estático
+    // Constrói o mundo a partir do mapa estático (32x32)
     Offline.buildWorldFromStaticMap();
 
     let playerData = Offline.defaultState.player;
@@ -106,35 +100,44 @@ const Offline = {
     console.log("Sobrevivente está offline. O apocalipse começou.");
   },
 
-  // Converte o array 2D em um único chunk (já que o mundo é pequeno)
+  // Mapa estático 32x32 (exemplo: borda de parede, interior de grama)
+  staticMap: Array(32).fill().map((_, y) =>
+    Array(32).fill().map((_, x) => {
+      if (x === 0 || x === 31 || y === 0 || y === 31) return 2; // paredes
+      return 1; // grama
+    })
+  ),
+
+  // Converte o array 2D em chunks compatíveis (32x32x4)
   buildWorldFromStaticMap: function() {
     const map = Offline.staticMap;
     const width = map[0].length;
     const height = map.length;
-    const depth = 1;   // apenas um andar
+    const depth = 4;   // profundidade do chunk (4 andares)
 
-    // Cria um array de tiles no formato esperado: {id, flags}
+    // Cria um único chunk (índice 0,0,0) e preenche todos os andares com o mesmo mapa
     let tilesArray = [];
     for (let z = 0; z < depth; z++) {
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           let tileId = map[y][x];
-          // Para simplificar: id=0 é vazio (não renderiza), id=1 é grama, id=2 é parede
+          // Abaixo do chão principal (z<3) deixa vazio (id=0) para não renderizar nada
+          if (z < depth - 1) {
+            tileId = 0;
+          }
           tilesArray.push({ id: tileId, flags: 0 });
         }
       }
     }
 
-    // O mundo tem apenas um chunk, posição (0,0,0)
+    // Posição do chunk no mundo (índice de chunk, não coordenadas absolutas)
     let chunkPos = new Position(0, 0, 0);
     let chunk = new Chunk(null, chunkPos, tilesArray);
 
-    // Adiciona o chunk ao mundo
     const world = gameClient.world;
     if (typeof world.setChunk === 'function') {
       world.setChunk(chunk);
     } else {
-      // Fallback: armazena no mapa world.chunks
       if (!world.chunks) world.chunks = {};
       world.chunks["0,0,0"] = chunk;
     }
