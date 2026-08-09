@@ -48,7 +48,6 @@ const Offline = {
   },
 
   start: function() {
-    console.log("Dados do jogador:", JSON.stringify(playerData, null, 2));
     console.log("Offline.start() executado");
 
     if (!gameClient.interface.areAssetsLoaded()) {
@@ -70,6 +69,7 @@ const Offline = {
     });
 
     let playerData = Offline.defaultState.player;
+    console.log("Dados do jogador:", JSON.stringify(playerData, null, 2));
     // CRIA UM OBJETO Position VÁLIDO
     let startPos = new Position(playerData.position.x, playerData.position.y, playerData.position.z);
 
